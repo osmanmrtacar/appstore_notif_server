@@ -4,6 +4,10 @@ node_modules/
 # Environment variables
 .env
 
+# Apple API Keys (NEVER commit these!)
+*.p8
+AuthKey*.p8
+
 # Logs
 logs
 *.log
