@@ -23,7 +23,9 @@ npm install
 cp .env.example .env
 ```
 
-3. (Optional) Modify the PORT in `.env` if needed
+3. Configure environment variables in `.env`:
+   - `PORT` - Server port (default: 3000)
+   - `WEBHOOK_URL` - Optional webhook URL to send notifications (e.g., Discord, Slack, your API)
 
 ## Usage
 

@@ -295,31 +295,35 @@ async function handleNotification(notificationType, subtype, payload, transactio
     console.log(`Auto-Renew Status: ${renewalInfo.autoRenewStatus === 1 ? 'Enabled' : 'Disabled'}`);
   }
 
-  // Send notification to Discord webhook
-  try {
-    const webhookData = {
-      notificationType,
-      subtype,
-      transactionInfo,
-      renewalInfo,
-      timestamp: new Date().toISOString()
-    };
+  // Send notification to webhook (if configured)
+  const webhookUrl = process.env.WEBHOOK_URL;
 
-    const response = await fetch('https://flows.deplo.xyz/webhook/discord_call', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(webhookData)
-    });
+  if (webhookUrl) {
+    try {
+      const webhookData = {
+        notificationType,
+        subtype,
+        transactionInfo,
+        renewalInfo,
+        timestamp: new Date().toISOString()
+      };
 
-    if (response.ok) {
-      console.log('✓ Discord webhook called successfully');
-    } else {
-      console.error(`⚠ Discord webhook failed with status: ${response.status}`);
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(webhookData)
+      });
+
+      if (response.ok) {
+        console.log('✓ Webhook called successfully');
+      } else {
+        console.error(`⚠ Webhook failed with status: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('⚠ Error calling webhook:', error.message);
     }
-  } catch (error) {
-    console.error('⚠ Error calling Discord webhook:', error.message);
   }
 
   console.log('--- End Processing ---\n');
