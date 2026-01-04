@@ -13,88 +13,37 @@ app.use(express.json({
   }
 }));
 
-// JWKS client to fetch Apple's public keys
-const client = jwksClient({
-  jwksUri: 'https://appleid.apple.com/auth/keys',
-  cache: true,
-  cacheMaxAge: 86400000, // 24 hours
-  rateLimit: true
-});
-
-// Function to get signing key from Apple
-function getKey(header, callback) {
-  // If kid is present, use it directly
-  if (header.kid) {
-    client.getSigningKey(header.kid, (err, key) => {
-      if (err) {
-        callback(err);
-        return;
-      }
-      const signingKey = key.getPublicKey();
-      callback(null, signingKey);
-    });
-  } else {
-    // If no kid, fetch all keys and try to find the right one
-    // This shouldn't normally happen with Apple's tokens, but we handle it anyway
-    console.warn('Warning: JWT token has no kid in header');
-    callback(new Error('No KID specified in JWT header'));
+// Function to get public key from x5c certificate chain in JWT header
+function getKeyFromX5c(header, callback) {
+  try {
+    // App Store Server Notifications use x5c (certificate chain) in the header
+    if (header.x5c && header.x5c.length > 0) {
+      const cert = `-----BEGIN CERTIFICATE-----\n${header.x5c[0]}\n-----END CERTIFICATE-----`;
+      const { createPublicKey } = require('crypto');
+      const publicKey = createPublicKey(cert);
+      callback(null, publicKey);
+    } else {
+      callback(new Error('No x5c certificate chain found in JWT header'));
+    }
+  } catch (error) {
+    callback(error);
   }
-}
-
-// Function to fetch all JWKS keys
-async function getAllKeys() {
-  const response = await fetch('https://appleid.apple.com/auth/keys');
-  const jwks = await response.json();
-  return jwks.keys;
 }
 
 // Function to verify and decode JWT token
 async function verifyToken(token) {
-  // First, try the standard verification with kid
   return new Promise((resolve, reject) => {
-    jwt.verify(token, getKey, {
-      algorithms: ['ES256'],
-      issuer: 'https://appleid.apple.com'
-    }, async (err, decoded) => {
-      if (err && err.message.includes('No KID specified')) {
-        // If kid is missing, try all available keys
-        console.log('Attempting verification with all available keys...');
-        try {
-          const keys = await getAllKeys();
-
-          for (const key of keys) {
-            try {
-              // Convert JWK to PEM format for verification
-              const publicKey = await jwkToPem(key);
-              const decoded = jwt.verify(token, publicKey, {
-                algorithms: ['ES256'],
-                issuer: 'https://appleid.apple.com'
-              });
-              console.log(`✓ Token verified successfully with key: ${key.kid}`);
-              resolve(decoded);
-              return;
-            } catch (keyErr) {
-              // Try next key
-              continue;
-            }
-          }
-          reject(new Error('Token could not be verified with any available key'));
-        } catch (fetchErr) {
-          reject(fetchErr);
-        }
-      } else if (err) {
+    jwt.verify(token, getKeyFromX5c, {
+      algorithms: ['ES256']
+      // Note: App Store Server Notifications don't use 'iss' claim
+    }, (err, decoded) => {
+      if (err) {
         reject(err);
       } else {
         resolve(decoded);
       }
     });
   });
-}
-
-// Helper function to convert JWK to PEM (for ES256 keys)
-async function jwkToPem(jwk) {
-  const { createPublicKey } = require('crypto');
-  return createPublicKey({ key: jwk, format: 'jwk' });
 }
 
 // Function to decode JWT payload without verification (for nested tokens)
